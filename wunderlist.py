@@ -15,11 +15,21 @@ def get_list(headers):
 def usage():
 	print( "Usage:\n" + sys.argv[0] + " get_list\n" + sys.argv[0] + " [ --due today/tomorrow/2038-01-19 ] [ --star ] [ --list list_id ] add task_name" )
 
-def add_task(headers, task):
+def add_task(headers, task, reminder):
 	result = requests.post( "https://a.wunderlist.com/api/v1/tasks", headers=headers, data=json.dumps(task) )
 
 	if result.status_code != 201:
 		print( result.text )
+        elif reminder['set']==1:
+                task = result.json()
+                print(task['id'], task['title'])
+                add_reminder(task['id'],reminder,headers)
+
+def add_reminder(task_id, reminder, headers):
+    reminderdata = {"task_id": task_id}
+    #reminderdata['task_id'] = task_id
+    reminderdata['date'] = reminder['date']
+    result = requests.post ("https://a.wunderlist.com/api/v1/reminders",headers=headers, data=json.dumps(reminderdata))
 
 def main():
 	if not( os.path.isfile("config.json") ):
@@ -30,7 +40,7 @@ def main():
 	headers = { 'X-Access-Token' : config['token'], 'X-Client-ID' : config['client_id'], 'Content-Type' : 'application/json' }
 	
 	try:
-		opts, args = getopt.getopt( sys.argv[1:], "h", [ "due=", "star", "list="] )
+		opts, args = getopt.getopt( sys.argv[1:], "h", [ "due=", "star", "list=", "reminder="] )
 	except getopt.GetoptError:
 		usage()
 		sys.exit(3)
@@ -45,6 +55,7 @@ def main():
 			usage()
 			sys.exit(3)
 		task = { "title": args[1] }
+                reminder = {"set": 0}
 
 		for opt, arg in opts:
 			if opt == "--due":
@@ -63,13 +74,25 @@ def main():
 				task['starred'] = True
 			elif opt == "--list":
 				task['list_id'] = int(arg)
+                        elif opt == "--reminder":
+                                reminder['set'] = 1
+				if arg == "now":
+					rdate = datetime.datetime.now() - datetime.timedelta(hours=1)
+                                        #rdate = today()
+                                else:
+                                        try:
+                                                rdate = datetime.date( int(arg.split('-')[0]), int(arg.split('-')[1]), int(arg.split('-')[2]) )
+                                        except:
+                                                print("Due day should be a valid day, like today is " + str(datetime.date.today()) + ".")
+                                                sys.exit(4)
+                                reminder['date'] = str(rdate)
 
 		if not( config.get('default_list_id') ) and not( task.get('list_id') ):
 			print( "Please give me your list id, you can set the default value at config.json." )
 			sys.exit(5)
 		task.setdefault( 'list_id', int( config.get('default_list_id') ) )
 		
-		add_task( headers, task )
+		add_task( headers, task, reminder)
 	else:
 		usage()
 		sys.exit(3)
